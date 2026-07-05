@@ -1,6 +1,6 @@
 // Leitner spaced repetition. Boxes 1-5; correct answers climb, wrong answers
 // fall back to box 1 with interval 0 so the word re-enters the current session.
-pub const MODES: [&str; 4] = ["spell", "read", "translate", "listen"];
+pub const MODES: [&str; 5] = ["spell", "read", "translate", "phonetic", "listen"];
 
 const INTERVAL_DAYS: [i64; 5] = [0, 1, 3, 7, 21];
 const MAX_BOX: i64 = 5;

@@ -1,13 +1,15 @@
 # Thai Practice
 
 A small self-hosted web app for practicing Thai vocabulary: add words, then
-drill them in four modes with Leitner spaced repetition. Works on laptop and
+drill them in five modes with Leitner spaced repetition. Works on laptop and
 phone (installable via the PWA manifest), and ships an optional on-screen
-Kedmanee Thai keyboard for people without a Thai keyboard.
+Kedmanee Thai keyboard for people without a Thai keyboard, plus a phonetic
+palette (ɛ ɔ ə ʉ ŋ and combining tone marks) for typing transliterations.
 
 **Modes:** Spelling (see English, type Thai) · Reading (read Thai, self-grade
-the meaning) · Translation (read Thai, type English) · Listening (hear Thai
-via the browser's built-in text-to-speech, type it).
+the meaning) · Translation (read Thai, type English) · Pronunciation (read
+Thai, type the phonetic — only words with a phonetic are drilled) · Listening
+(hear Thai via the browser's built-in text-to-speech, type it).
 
 Words you miss fall back to Leitner box 1 and come around again immediately;
 words you know climb boxes 1→5 with review intervals of 0, 1, 3, 7 and 21 days,

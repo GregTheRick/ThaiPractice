@@ -118,6 +118,12 @@ fn api_round_trip() {
     let (_, _, body) = http(p, "GET", "/api/words", &cookie, "");
     assert!(body.contains(r#""spell":1"#), "got: {body}");
 
+    // phonetic mode only quizzes words that have a phonetic
+    let (status, _, _) = http(p, "POST", "/api/words", &cookie, r#"{"thai":"ไป","meaning":"go"}"#);
+    assert_eq!(status, 200);
+    let (_, _, body) = http(p, "GET", "/api/quiz?mode=phonetic", &cookie, "");
+    assert!(body.contains("น้ำ") && !body.contains("ไป"), "got: {body}");
+
     // unknown mode rejected
     assert_eq!(http(p, "GET", "/api/quiz?mode=hack", &cookie, "").0, 400);
 

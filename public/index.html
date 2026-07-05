@@ -34,11 +34,17 @@
         <div class="row">
           <input id="thai-input" v-model="form.thai" placeholder="Thai — น้ำ" lang="th" required
                  autocomplete="off">
-          <button type="button" class="kb-toggle" :class="{ active: kbOn }" @click="toggleKb"
+          <button type="button" class="kb-toggle" :class="{ active: kbOn }" @click="toggle('kbOn')"
                   aria-label="Toggle on-screen Thai keyboard">⌨</button>
         </div>
         <thai-keyboard v-if="kbOn" target="thai-input"></thai-keyboard>
-        <input v-model="form.phonetic" placeholder="Phonetic (optional) — nám" autocomplete="off">
+        <div class="row">
+          <input id="phonetic-input" v-model="form.phonetic" placeholder="Phonetic (optional) — nám"
+                 autocomplete="off" autocapitalize="off">
+          <button type="button" class="kb-toggle" :class="{ active: kbPhon }" @click="toggle('kbPhon')"
+                  aria-label="Toggle phonetic character palette">⌨</button>
+        </div>
+        <thai-keyboard v-if="kbPhon" target="phonetic-input" :layout="phoneticRows"></thai-keyboard>
         <input v-model="form.meaning" placeholder="Meaning — water" required autocomplete="off">
         <div class="row">
           <button>{{ form.id ? 'Save' : 'Add word' }}</button>
@@ -112,11 +118,16 @@
             <div class="row">
               <input id="quiz-input" v-model="quiz.answer" autocomplete="off" autocapitalize="off"
                      :lang="thaiTyped ? 'th' : 'en'"
-                     :placeholder="thaiTyped ? 'Type the Thai word' : 'Type the meaning in English'">
+                     :placeholder="thaiTyped ? 'Type the Thai word'
+                       : quiz.mode === 'phonetic' ? 'Type the phonetic — nám' : 'Type the meaning in English'">
               <button type="button" v-if="thaiTyped" class="kb-toggle" :class="{ active: kbOn }"
-                      @click="toggleKb" aria-label="Toggle on-screen Thai keyboard">⌨</button>
+                      @click="toggle('kbOn')" aria-label="Toggle on-screen Thai keyboard">⌨</button>
+              <button type="button" v-else-if="quiz.mode === 'phonetic'" class="kb-toggle" :class="{ active: kbPhon }"
+                      @click="toggle('kbPhon')" aria-label="Toggle phonetic character palette">⌨</button>
             </div>
             <thai-keyboard v-if="kbOn && thaiTyped" target="quiz-input"></thai-keyboard>
+            <thai-keyboard v-else-if="kbPhon && quiz.mode === 'phonetic'" target="quiz-input"
+                           :layout="phoneticRows"></thai-keyboard>
             <button>Check</button>
           </form>
           <template v-else>

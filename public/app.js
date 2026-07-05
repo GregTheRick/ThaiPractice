@@ -2,6 +2,7 @@ const MODES = [
   { id: 'spell', name: 'Spelling', badge: 'S', desc: 'See English, type the Thai word' },
   { id: 'read', name: 'Reading', badge: 'R', desc: 'Read Thai, recall the meaning' },
   { id: 'translate', name: 'Translation', badge: 'T', desc: 'Read Thai, type the English meaning' },
+  { id: 'phonetic', name: 'Pronunciation', badge: 'P', desc: 'Read Thai, type the phonetic' },
   { id: 'listen', name: 'Listening', badge: 'L', desc: 'Hear Thai, type what you heard' },
 ];
 
@@ -25,6 +26,8 @@ const app = Vue.createApp({
     words: [],
     form: { id: null, thai: '', phonetic: '', meaning: '' },
     kbOn: localStorage.getItem('kbOn') === '1',
+    kbPhon: localStorage.getItem('kbPhon') === '1',
+    phoneticRows: PHONETIC,
     modes: MODES,
     quiz: { mode: null, words: [], i: 0, answer: '', revealed: false, result: null, right: 0, wrong: 0 },
   }),
@@ -60,9 +63,9 @@ const app = Vue.createApp({
       }
     },
     async load() { this.words = await this.api('/api/words'); },
-    toggleKb() {
-      this.kbOn = !this.kbOn;
-      localStorage.setItem('kbOn', this.kbOn ? '1' : '0');
+    toggle(pref) {
+      this[pref] = !this[pref];
+      localStorage.setItem(pref, this[pref] ? '1' : '0');
     },
     async saveWord() {
       this.error = '';
@@ -100,7 +103,9 @@ const app = Vue.createApp({
       }).catch(() => {});
     },
     submitAnswer() {
-      const [a, b] = [norm(this.quiz.answer), norm(this.thaiTyped ? this.cur.thai : this.cur.meaning)];
+      const expected = this.thaiTyped ? this.cur.thai
+        : this.quiz.mode === 'phonetic' ? this.cur.phonetic : this.cur.meaning;
+      const [a, b] = [norm(this.quiz.answer), norm(expected)];
       this.quiz.result = this.thaiTyped ? a === b : a.toLowerCase() === b.toLowerCase();
       this.review(this.quiz.result);
     },

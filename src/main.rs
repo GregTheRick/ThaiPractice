@@ -134,7 +134,8 @@ fn quiz(db: &Connection, mode: &str) -> Result<Resp, String> {
     let mut stmt = db.prepare(
         "SELECT w.id, w.thai, w.meaning, w.phonetic, COALESCE(p.box, 1)
          FROM words w LEFT JOIN progress p ON p.word_id = w.id AND p.mode = ?1
-         WHERE p.due_at IS NULL OR p.due_at <= ?2
+         WHERE (p.due_at IS NULL OR p.due_at <= ?2)
+           AND NOT (?1 = 'phonetic' AND w.phonetic = '')
          ORDER BY RANDOM() LIMIT 20",
     ).map_err(db_err)?;
     let words = stmt.query_map((mode, now()), |r| {

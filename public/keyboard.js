@@ -11,6 +11,14 @@ const KEDMANEE = [
    ['ใ', 'ฬ'], ['ฝ', 'ฦ']],
 ];
 
+// Palette for typing phonetic transliterations: the vowels/consonant a Latin
+// keyboard lacks, plus combining tone marks that attach to the letter before
+// the cursor (type "na", tap the tone, get "ná").
+const PHONETIC = [
+  [['ɛ'], ['ɔ'], ['ə'], ['ʉ'], ['ŋ']],
+  [['̀'], ['́'], ['̂'], ['̌']], // ◌̀ ◌́ ◌̂ ◌̌
+];
+
 // Inserts at the input's cursor (or deletes one char for '\b') and fires an
 // input event so Vue's v-model stays in sync.
 function kbInsert(targetId, ch) {
@@ -26,10 +34,16 @@ function kbInsert(targetId, ch) {
 
 // pointerdown.prevent everywhere so tapping keys never steals focus from the input.
 const ThaiKeyboard = {
-  props: { target: String },
+  props: { target: String, layout: { default: () => KEDMANEE } },
   data: () => ({ shift: false }),
-  computed: { rows: () => KEDMANEE },
+  computed: {
+    rows() { return this.layout; },
+    hasShift() { return this.layout.some(row => row.some(k => k[1])); },
+  },
   methods: {
+    key(k) { return this.shift && k[1] ? k[1] : k[0]; },
+    // combining marks get a dotted circle so they are visible on the key
+    label(k) { const ch = this.key(k); return /[̀-ͯ]/.test(ch) ? '◌' + ch : ch; },
     press(ch) {
       kbInsert(this.target, ch);
       this.shift = false;
@@ -39,10 +53,10 @@ const ThaiKeyboard = {
   <div class="kb">
     <div class="kb-row" v-for="row in rows">
       <button type="button" v-for="k in row" :key="k[0]"
-              @pointerdown.prevent="press(shift ? k[1] : k[0])">{{ shift ? k[1] : k[0] }}</button>
+              @pointerdown.prevent="press(key(k))">{{ label(k) }}</button>
     </div>
     <div class="kb-row">
-      <button type="button" class="kb-wide" :class="{ active: shift }" aria-label="Shift"
+      <button type="button" v-if="hasShift" class="kb-wide" :class="{ active: shift }" aria-label="Shift"
               @pointerdown.prevent="shift = !shift">⇧</button>
       <button type="button" class="kb-space" aria-label="Space"
               @pointerdown.prevent="press(' ')"> </button>
