@@ -11,12 +11,16 @@ const KEDMANEE = [
    ['ใ', 'ฬ'], ['ฝ', 'ฦ']],
 ];
 
-// Palette for typing phonetic transliterations: the vowels/consonant a Latin
-// keyboard lacks, plus combining tone marks that attach to the letter before
-// the cursor (type "na", tap the tone, get "ná").
+// IPA keyboard for Thai transliteration (Chulalongkorn CTFL system).
+// Vowels + consonants cover the full inventory: long vowels are doubled (aa),
+// digraphs are typed letter by letter (kh = k + h). The last row holds the
+// combining tone marks — low, falling, high, rising; level is unmarked —
+// which attach to the letter before the cursor (type "pa", tap tone, get "pà").
 const PHONETIC = [
-  [['ɛ'], ['ɔ'], ['ə'], ['ʉ'], ['ŋ']],
-  [['̀'], ['́'], ['̂'], ['̌']], // ◌̀ ◌́ ◌̂ ◌̌
+  [['a'], ['e'], ['i'], ['o'], ['u'], ['ɛ'], ['ɔ'], ['ə'], ['ɯ']],
+  [['b'], ['c'], ['d'], ['f'], ['h'], ['k'], ['l'], ['m'], ['n'], ['p']],
+  [['r'], ['s'], ['t'], ['w'], ['y'], ['ʔ'], ['ŋ']],
+  [['̀'], ['̂'], ['́'], ['̌']], // ◌̀ ◌̂ ◌́ ◌̌
 ];
 
 // Inserts at the input's cursor (or deletes one char for '\b') and fires an
@@ -42,8 +46,8 @@ const ThaiKeyboard = {
   },
   methods: {
     key(k) { return this.shift && k[1] ? k[1] : k[0]; },
-    // combining marks get a dotted circle so they are visible on the key
-    label(k) { const ch = this.key(k); return /[̀-ͯ]/.test(ch) ? '◌' + ch : ch; },
+    // tone-mark keys are shown applied to "a" (à â á ǎ), like the course slides
+    label(k) { const ch = this.key(k); return /[̀-ͯ]/.test(ch) ? 'a' + ch : ch; },
     press(ch) {
       kbInsert(this.target, ch);
       this.shift = false;

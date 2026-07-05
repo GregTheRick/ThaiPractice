@@ -3,8 +3,9 @@
 A small self-hosted web app for practicing Thai vocabulary: add words, then
 drill them in five modes with Leitner spaced repetition. Works on laptop and
 phone (installable via the PWA manifest), and ships an optional on-screen
-Kedmanee Thai keyboard for people without a Thai keyboard, plus a phonetic
-palette (ɛ ɔ ə ʉ ŋ and combining tone marks) for typing transliterations.
+Kedmanee Thai keyboard for people without a Thai keyboard, plus an on-screen
+IPA keyboard (Chulalongkorn CTFL system: vowels incl. ɛ ɔ ə ɯ, consonants
+incl. ʔ ŋ, and combining tone marks) for typing transliterations.
 
 **Modes:** Spelling (see English, type Thai) · Reading (read Thai, self-grade
 the meaning) · Translation (read Thai, type English) · Pronunciation (read
