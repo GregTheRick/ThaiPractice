@@ -1,0 +1,111 @@
+* { box-sizing: border-box; }
+[v-cloak] { display: none; }
+
+:root {
+  --blue: #1e3a8a;
+  --bg: #f1f5f9;
+  --card: #fff;
+  --border: #cbd5e1;
+  --good: #15803d;
+  --bad: #b91c1c;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: #0f172a;
+}
+
+#app { max-width: 640px; margin: 0 auto; padding: 0 0.75rem 3rem; }
+
+h1 { color: var(--blue); }
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+nav h1 { flex: 1; margin: 0; font-size: 1.4rem; }
+nav button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  margin: 0.75rem 0;
+}
+
+input, button {
+  font: inherit;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  min-height: 44px; /* touch target */
+}
+input { width: 100%; }
+input[lang="th"], .thai { font-size: 1.4rem; }
+button { cursor: pointer; }
+button:active { background: #e2e8f0; }
+
+.row { display: flex; gap: 0.5rem; }
+.add { display: flex; flex-direction: column; gap: 0.5rem; }
+.add > .row > button:first-child, form button[type="submit"] { flex: 1; }
+.kb-toggle.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+/* word list */
+.words { list-style: none; margin: 0; padding: 0; }
+.words li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.words .txt { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.words .thai { font-size: 1.5rem; }
+.words .phon { color: #64748b; font-size: 0.85rem; }
+.boxes { display: flex; flex-direction: column; font-size: 0.7rem; color: #64748b; line-height: 1.2; }
+.speak { border: none; background: none; font-size: 1.3rem; }
+.speak.big { font-size: 1.5rem; padding: 0.75rem 1.5rem; }
+
+/* practice */
+.modes { display: grid; gap: 0.5rem; }
+.modes button { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; text-align: left; }
+.modes small { color: #64748b; }
+.quiz form { display: flex; flex-direction: column; gap: 0.5rem; }
+.progress { color: #64748b; font-size: 0.85rem; margin-top: 0; }
+.prompt { font-size: 1.6rem; text-align: center; margin: 1.5rem 0; }
+.prompt.thai { font-size: 2.4rem; }
+.answer { text-align: center; font-size: 1.3rem; margin: 0.5rem 0; }
+.answer.thai { font-size: 2rem; }
+.center { text-align: center; }
+.good { color: var(--good); font-weight: 600; text-align: center; }
+.bad { color: var(--bad); font-weight: 600; text-align: center; }
+.good-btn, .bad-btn { flex: 1; color: #fff; border: none; }
+.good-btn { background: var(--good); }
+.bad-btn { background: var(--bad); }
+
+/* login */
+.login { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 20vh; text-align: center; }
+
+/* on-screen thai keyboard */
+.kb { user-select: none; }
+.kb-row { display: flex; gap: 3px; margin-bottom: 3px; }
+.kb-row button {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0.4rem 0;
+  font-size: 1.15rem;
+  border-radius: 6px;
+}
+.kb-row .kb-wide { flex: 1.6; }
+.kb-row .kb-space { flex: 5; }
+.kb-row button.active { background: var(--blue); color: #fff; }

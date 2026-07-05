@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thai Practice</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon.svg">
+  <meta name="theme-color" content="#1e3a8a">
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://unpkg.com/vue@3.5/dist/vue.global.prod.js"></script>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- login -->
+  <form v-if="view === 'login'" class="login card" @submit.prevent="login">
+    <h1>ไทย Practice</h1>
+    <input type="password" v-model="password" placeholder="Password" required autofocus>
+    <button>Log in</button>
+    <p class="bad" v-if="error">{{ error }}</p>
+  </form>
+
+  <template v-else>
+    <nav>
+      <h1>ไทย</h1>
+      <button :class="{ active: view === 'words' }" @click="view = 'words'; load()">Words</button>
+      <button :class="{ active: view === 'practice' }" @click="view = 'practice'; quiz.mode = null">Practice</button>
+    </nav>
+
+    <!-- words -->
+    <section v-if="view === 'words'">
+      <form class="card add" @submit.prevent="saveWord">
+        <div class="row">
+          <input id="thai-input" v-model="form.thai" placeholder="Thai — น้ำ" lang="th" required
+                 autocomplete="off">
+          <button type="button" class="kb-toggle" :class="{ active: kbOn }" @click="toggleKb"
+                  aria-label="Toggle on-screen Thai keyboard">⌨</button>
+        </div>
+        <thai-keyboard v-if="kbOn" target="thai-input"></thai-keyboard>
+        <input v-model="form.phonetic" placeholder="Phonetic (optional) — nám" autocomplete="off">
+        <input v-model="form.meaning" placeholder="Meaning — water" required autocomplete="off">
+        <div class="row">
+          <button>{{ form.id ? 'Save' : 'Add word' }}</button>
+          <button type="button" v-if="form.id" @click="resetForm">Cancel</button>
+        </div>
+        <p class="bad" v-if="error">{{ error }}</p>
+      </form>
+
+      <ul class="words">
+        <li v-for="w in words" :key="w.id">
+          <button class="speak" @click="speak(w.thai)" :aria-label="'Speak ' + w.thai">🔊</button>
+          <div class="txt">
+            <span class="thai">{{ w.thai }}</span>
+            <span class="phon" v-if="w.phonetic">{{ w.phonetic }}</span>
+            <span class="mean">{{ w.meaning }}</span>
+          </div>
+          <div class="boxes" title="Leitner box per mode (Spell/Read/Translate/Listen)">
+            <span v-for="m in modes" :key="m.id">{{ m.badge }}{{ w.boxes[m.id] || '·' }}</span>
+          </div>
+          <button @click="editWord(w)" aria-label="Edit">✎</button>
+          <button @click="delWord(w)" aria-label="Delete">🗑</button>
+        </li>
+      </ul>
+      <p class="center" v-if="!words.length">No words yet — add your first one above.</p>
+    </section>
+
+    <!-- practice -->
+    <section v-else>
+      <div v-if="!quiz.mode" class="modes">
+        <button v-for="m in modes" :key="m.id" class="card" @click="startQuiz(m.id)">
+          <strong>{{ m.name }}</strong><small>{{ m.desc }}</small>
+        </button>
+      </div>
+
+      <div v-else-if="quiz.i >= quiz.words.length" class="card center">
+        <template v-if="quiz.words.length">
+          <h2>Done!</h2>
+          <p><span class="good">{{ quiz.right }} right</span> · <span class="bad">{{ quiz.wrong }} wrong</span></p>
+        </template>
+        <template v-else>
+          <h2>Nothing due 🎉</h2>
+          <p>Every word in “{{ modeName(quiz.mode) }}” is scheduled for later.</p>
+        </template>
+        <button @click="quiz.mode = null">Back</button>
+      </div>
+
+      <div v-else class="card quiz">
+        <p class="progress">{{ quiz.i + 1 }} / {{ quiz.words.length }} · {{ modeName(quiz.mode) }}</p>
+
+        <p v-if="quiz.mode === 'spell'" class="prompt">{{ cur.meaning }}</p>
+        <p v-else-if="quiz.mode === 'listen'" class="prompt">
+          <button type="button" class="speak big" @click="speak(cur.thai)">🔊 Play</button>
+        </p>
+        <p v-else class="prompt thai">{{ cur.thai }}</p>
+
+        <!-- reading: reveal + self-grade -->
+        <template v-if="quiz.mode === 'read'">
+          <button v-if="!quiz.revealed" @click="quiz.revealed = true">Show answer</button>
+          <template v-else>
+            <p class="answer">{{ cur.meaning }} <small v-if="cur.phonetic">({{ cur.phonetic }})</small></p>
+            <div class="row">
+              <button class="good-btn" @click="grade(true)">Knew it</button>
+              <button class="bad-btn" @click="grade(false)">Missed it</button>
+            </div>
+          </template>
+        </template>
+
+        <!-- typed modes -->
+        <template v-else>
+          <form v-if="quiz.result === null" @submit.prevent="submitAnswer">
+            <div class="row">
+              <input id="quiz-input" v-model="quiz.answer" autocomplete="off" autocapitalize="off"
+                     :lang="thaiTyped ? 'th' : 'en'"
+                     :placeholder="thaiTyped ? 'Type the Thai word' : 'Type the meaning in English'">
+              <button type="button" v-if="thaiTyped" class="kb-toggle" :class="{ active: kbOn }"
+                      @click="toggleKb" aria-label="Toggle on-screen Thai keyboard">⌨</button>
+            </div>
+            <thai-keyboard v-if="kbOn && thaiTyped" target="quiz-input"></thai-keyboard>
+            <button>Check</button>
+          </form>
+          <template v-else>
+            <p :class="quiz.result ? 'good' : 'bad'">{{ quiz.result ? '✓ Correct!' : '✗ Not quite' }}</p>
+            <p class="answer thai">{{ cur.thai }} <small v-if="cur.phonetic">({{ cur.phonetic }})</small></p>
+            <p class="answer">{{ cur.meaning }}</p>
+            <button @click="next">Next</button>
+          </template>
+        </template>
+      </div>
+    </section>
+  </template>
+</div>
+<script src="/keyboard.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
