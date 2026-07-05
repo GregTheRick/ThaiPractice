@@ -12,6 +12,9 @@ the meaning) · Translation (read Thai, type English) · Pronunciation (read
 Thai, type the phonetic — only words with a phonetic are drilled) · Listening
 (hear Thai via the browser's built-in text-to-speech, type it).
 
+A word can have several meanings — separate them with `;` or `,` when adding
+it ("water; liquid"). In Translation mode, typing any one of them counts.
+
 Words you miss fall back to Leitner box 1 and come around again immediately;
 words you know climb boxes 1→5 with review intervals of 0, 1, 3, 7 and 21 days,
 per word *and* per mode.

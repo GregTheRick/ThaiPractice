@@ -1,12 +1,17 @@
 const MODES = [
   { id: 'spell', name: 'Spelling', badge: 'S', desc: 'See English, type the Thai word' },
   { id: 'read', name: 'Reading', badge: 'R', desc: 'Read Thai, recall the meaning' },
-  { id: 'translate', name: 'Translation', badge: 'T', desc: 'Read Thai, type the English meaning' },
+  { id: 'translate', name: 'Translation', badge: 'T', desc: 'Read Thai, type any English meaning' },
   { id: 'phonetic', name: 'Pronunciation', badge: 'P', desc: 'Read Thai, type the phonetic' },
   { id: 'listen', name: 'Listening', badge: 'L', desc: 'Hear Thai, type what you heard' },
 ];
 
 const norm = s => s.normalize('NFC').trim();
+
+// A word can have several meanings, separated by ; or , — any one is a
+// correct answer. ponytail: a single meaning that itself contains a comma
+// also matches on its fragments, which is fine for practice.
+const meanings = s => s.split(/[;,]/).map(m => norm(m).toLowerCase()).filter(Boolean);
 
 function speak(text) {
   const u = new SpeechSynthesisUtterance(text);
@@ -115,10 +120,10 @@ const app = Vue.createApp({
       }).catch(() => {});
     },
     submitAnswer() {
-      const expected = this.thaiTyped ? this.cur.thai
-        : this.quiz.mode === 'phonetic' ? this.cur.phonetic : this.cur.meaning;
-      const [a, b] = [norm(this.quiz.answer), norm(expected)];
-      this.quiz.result = this.thaiTyped ? a === b : a.toLowerCase() === b.toLowerCase();
+      const a = norm(this.quiz.answer);
+      this.quiz.result = this.thaiTyped ? a === norm(this.cur.thai)
+        : this.quiz.mode === 'phonetic' ? a.toLowerCase() === norm(this.cur.phonetic).toLowerCase()
+        : meanings(this.cur.meaning).includes(a.toLowerCase());
       this.review(this.quiz.result);
     },
     grade(correct) {

@@ -52,7 +52,7 @@
                   aria-label="Toggle phonetic character palette">⌨</button>
         </div>
         <thai-keyboard v-if="kbPhon" target="phonetic-input" :layout="phoneticRows"></thai-keyboard>
-        <input v-model="form.meaning" placeholder="Meaning — water" required autocomplete="off">
+        <input v-model="form.meaning" placeholder="Meaning(s) — water; liquid" required autocomplete="off">
         <div class="row">
           <button>{{ form.id ? 'Save' : 'Add word' }}</button>
           <button type="button" v-if="form.id" @click="resetForm">Cancel</button>
@@ -126,7 +126,7 @@
               <input id="quiz-input" v-model="quiz.answer" autocomplete="off" autocapitalize="off"
                      :lang="thaiTyped ? 'th' : 'en'"
                      :placeholder="thaiTyped ? 'Type the Thai word'
-                       : quiz.mode === 'phonetic' ? 'Type the phonetic — nám' : 'Type the meaning in English'">
+                       : quiz.mode === 'phonetic' ? 'Type the phonetic — nám' : 'Type a meaning in English'">
               <button type="button" v-if="thaiTyped" class="kb-toggle" :class="{ active: kbOn }"
                       @click="toggle('kbOn')" aria-label="Toggle on-screen Thai keyboard">⌨</button>
               <button type="button" v-else-if="quiz.mode === 'phonetic'" class="kb-toggle" :class="{ active: kbPhon }"
