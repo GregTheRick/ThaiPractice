@@ -52,7 +52,15 @@
                   aria-label="Toggle phonetic character palette">⌨</button>
         </div>
         <thai-keyboard v-if="kbPhon" target="phonetic-input" :layout="phoneticRows"></thai-keyboard>
-        <input v-model="form.meaning" placeholder="Meaning(s) — water; liquid" required autocomplete="off">
+        <div class="row">
+          <input v-model="newMeaning" placeholder="Meaning — water" autocomplete="off"
+                 @keydown.enter.prevent="addMeaning">
+          <button type="button" @click="addMeaning" aria-label="Add meaning">+</button>
+        </div>
+        <div class="chips" v-if="form.meanings.length">
+          <button type="button" class="chip" v-for="(m, i) in form.meanings" :key="m"
+                  @click="form.meanings.splice(i, 1)" :title="'Remove ' + m">{{ m }} ✕</button>
+        </div>
         <div class="row">
           <button>{{ form.id ? 'Save' : 'Add word' }}</button>
           <button type="button" v-if="form.id" @click="resetForm">Cancel</button>
@@ -66,7 +74,7 @@
           <div class="txt">
             <span class="thai">{{ w.thai }}</span>
             <span class="phon" v-if="w.phonetic">{{ w.phonetic }}</span>
-            <span class="mean">{{ w.meaning }}</span>
+            <span class="mean">{{ w.meanings.join(' · ') }}</span>
           </div>
           <div class="boxes" title="Leitner box per mode (Spell/Read/Translate/Listen)">
             <span v-for="m in modes" :key="m.id">{{ m.badge }}{{ w.boxes[m.id] || '·' }}</span>
@@ -101,7 +109,7 @@
       <div v-else class="card quiz">
         <p class="progress">{{ quiz.i + 1 }} / {{ quiz.words.length }} · {{ modeName(quiz.mode) }}</p>
 
-        <p v-if="quiz.mode === 'spell'" class="prompt">{{ cur.meaning }}</p>
+        <p v-if="quiz.mode === 'spell'" class="prompt">{{ cur.meanings.join(' · ') }}</p>
         <p v-else-if="quiz.mode === 'listen'" class="prompt">
           <button type="button" class="speak big" @click="speak(cur.thai)">🔊 Play</button>
         </p>
@@ -111,7 +119,7 @@
         <template v-if="quiz.mode === 'read'">
           <button v-if="!quiz.revealed" @click="quiz.revealed = true">Show answer</button>
           <template v-else>
-            <p class="answer">{{ cur.meaning }} <small v-if="cur.phonetic">({{ cur.phonetic }})</small></p>
+            <p class="answer">{{ cur.meanings.join(' · ') }} <small v-if="cur.phonetic">({{ cur.phonetic }})</small></p>
             <div class="row">
               <button class="good-btn" @click="grade(true)">Knew it</button>
               <button class="bad-btn" @click="grade(false)">Missed it</button>
@@ -135,12 +143,26 @@
             <thai-keyboard v-if="kbOn && thaiTyped" target="quiz-input"></thai-keyboard>
             <thai-keyboard v-else-if="kbPhon && quiz.mode === 'phonetic'" target="quiz-input"
                            :layout="phoneticRows"></thai-keyboard>
-            <button>Check</button>
+            <template v-if="quiz.mode === 'translate'">
+              <div class="chips" v-if="quiz.found.length">
+                <span class="chip good-chip" v-for="m in quiz.found" :key="m">✓ {{ m }}</span>
+              </div>
+              <p class="progress">{{ quiz.found.length }} / {{ cur.meanings.length }} meanings found</p>
+              <div class="row">
+                <button>Check</button>
+                <button type="button" @click="giveUp">Reveal</button>
+              </div>
+            </template>
+            <button v-else>Check</button>
           </form>
           <template v-else>
             <p :class="quiz.result ? 'good' : 'bad'">{{ quiz.result ? '✓ Correct!' : '✗ Not quite' }}</p>
             <p class="answer thai">{{ cur.thai }} <small v-if="cur.phonetic">({{ cur.phonetic }})</small></p>
-            <p class="answer">{{ cur.meaning }}</p>
+            <div class="chips center-chips" v-if="quiz.mode === 'translate'">
+              <span class="chip" :class="quiz.found.includes(m) ? 'good-chip' : 'bad-chip'"
+                    v-for="m in cur.meanings" :key="m">{{ quiz.found.includes(m) ? '✓' : '✗' }} {{ m }}</span>
+            </div>
+            <p class="answer" v-else>{{ cur.meanings.join(' · ') }}</p>
             <button @click="next">Next</button>
           </template>
         </template>

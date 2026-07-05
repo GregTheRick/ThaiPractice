@@ -12,8 +12,10 @@ the meaning) · Translation (read Thai, type English) · Pronunciation (read
 Thai, type the phonetic — only words with a phonetic are drilled) · Listening
 (hear Thai via the browser's built-in text-to-speech, type it).
 
-A word can have several meanings — separate them with `;` or `,` when adding
-it ("water; liquid"). In Translation mode, typing any one of them counts.
+A word can have several meanings, added one by one in the form. In Translation
+mode you must name every meaning: each guess is checked exactly against a whole
+meaning ("go" does not count for "go to"), a wrong guess ends the round, and
+the reveal flags each meaning as found or missed.
 
 Words you miss fall back to Leitner box 1 and come around again immediately;
 words you know climb boxes 1→5 with review intervals of 0, 1, 3, 7 and 21 days,

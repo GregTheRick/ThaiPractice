@@ -25,6 +25,17 @@ fn start_server() -> Server {
     let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let db = std::env::temp_dir().join(format!("thai-test-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&db);
+    // seed one pre-list word (plain-text meaning, user_id 1) so the round trip
+    // also covers the startup migration and first-account data adoption
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE words(id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL DEFAULT 1,
+           thai TEXT NOT NULL, meaning TEXT NOT NULL, phonetic TEXT NOT NULL DEFAULT '',
+           created_at INTEGER NOT NULL);
+         INSERT INTO words(thai, meaning, phonetic, created_at)
+           VALUES ('เข้า', 'to enter; go in', 'khâw', 0);",
+    ).unwrap();
+    drop(conn);
     let child = Command::new(env!("CARGO_BIN_EXE_thai-practice"))
         .env("PORT", port.to_string())
         .env("DB_PATH", &db)
@@ -98,15 +109,25 @@ fn api_round_trip() {
     let (_, _, body) = http(p, "GET", "/api/me", &cookie, "");
     assert!(body.contains("alice"), "got: {body}");
 
-    // validation: empty thai rejected
-    let (status, _, _) = http(p, "POST", "/api/words", &cookie, r#"{"thai":" ","meaning":"water"}"#);
-    assert_eq!(status, 400);
+    // migration: the seeded plain-text word now belongs to the first account
+    // as a proper meanings list
+    let (_, _, body) = http(p, "GET", "/api/words", &cookie, "");
+    assert!(body.contains(r#"["to enter","go in"]"#), "got: {body}");
+    assert_eq!(http(p, "DELETE", "/api/words/1", &cookie, "").0, 200); // note: id 1 is now free and SQLite reuses it for the next insert
 
-    // add a word
+    // validation: empty thai / empty meanings / blank meanings rejected
+    assert_eq!(http(p, "POST", "/api/words", &cookie, r#"{"thai":" ","meanings":["water"]}"#).0, 400);
+    assert_eq!(http(p, "POST", "/api/words", &cookie, r#"{"thai":"น้ำ","meanings":[]}"#).0, 400);
+    assert_eq!(http(p, "POST", "/api/words", &cookie, r#"{"thai":"น้ำ","meanings":[" "]}"#).0, 400);
+    assert_eq!(http(p, "POST", "/api/words", &cookie, r#"{"thai":"น้ำ","meaning":"water"}"#).0, 400);
+
+    // add a word; duplicate meanings collapse
     let (status, _, body) = http(p, "POST", "/api/words", &cookie,
-        r#"{"thai":"น้ำ","meaning":"water","phonetic":"nám"}"#);
+        r#"{"thai":"น้ำ","meanings":["water","Water","liquid"],"phonetic":"nám"}"#);
     assert_eq!(status, 200);
     assert!(body.contains("\"id\""), "got: {body}");
+    let (_, _, body) = http(p, "GET", "/api/words", &cookie, "");
+    assert!(body.contains(r#"["water","liquid"]"#), "got: {body}");
 
     // it is due in the spell quiz
     let (status, _, body) = http(p, "GET", "/api/quiz?mode=spell", &cookie, "");
@@ -137,7 +158,7 @@ fn api_round_trip() {
     assert!(body.contains(r#""spell":1"#), "got: {body}");
 
     // phonetic mode only quizzes words that have a phonetic
-    let (status, _, _) = http(p, "POST", "/api/words", &cookie, r#"{"thai":"ไป","meaning":"go"}"#);
+    let (status, _, _) = http(p, "POST", "/api/words", &cookie, r#"{"thai":"ไป","meanings":["go"]}"#);
     assert_eq!(status, 200);
     let (_, _, body) = http(p, "GET", "/api/quiz?mode=phonetic", &cookie, "");
     assert!(body.contains("น้ำ") && !body.contains("ไป"), "got: {body}");
@@ -152,7 +173,7 @@ fn api_round_trip() {
     assert_eq!(body.trim(), "[]");
     let (_, _, body) = http(p, "GET", "/api/quiz?mode=spell", &bob, "");
     assert_eq!(body.trim(), "[]");
-    assert_eq!(http(p, "PUT", "/api/words/1", &bob, r#"{"thai":"x","meaning":"y"}"#).0, 400);
+    assert_eq!(http(p, "PUT", "/api/words/1", &bob, r#"{"thai":"x","meanings":["y"]}"#).0, 400);
     assert_eq!(http(p, "DELETE", "/api/words/1", &bob, "").0, 400);
     assert_eq!(http(p, "POST", "/api/review", &bob, r#"{"word_id":1,"mode":"spell","correct":true}"#).0, 400);
 

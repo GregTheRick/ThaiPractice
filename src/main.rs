@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS words(
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL DEFAULT 1,
   thai TEXT NOT NULL,
-  meaning TEXT NOT NULL,
+  meaning TEXT NOT NULL, -- JSON list of meanings, e.g. [\"go to\",\"go with\"]
   phonetic TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
@@ -47,6 +47,7 @@ fn main() {
         db.execute_batch("DROP TABLE IF EXISTS sessions").expect("migrate sessions");
     }
     db.execute_batch(SCHEMA).expect("create schema");
+    migrate_meanings(&db);
 
     let server = Server::http(("0.0.0.0", port)).expect("bind port");
     println!("listening on http://0.0.0.0:{port}");
@@ -55,6 +56,26 @@ fn main() {
     for mut req in server.incoming_requests() {
         let resp = handle(&mut req, &db);
         let _ = req.respond(resp);
+    }
+}
+
+/// Converts pre-list plain-text meanings ("water; liquid") to JSON lists.
+fn migrate_meanings(db: &Connection) {
+    let mut stmt = db.prepare("SELECT id, meaning FROM words").expect("read words");
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("read words")
+        .flatten()
+        .collect();
+    drop(stmt);
+    for (id, raw) in rows {
+        if serde_json::from_str::<Vec<String>>(&raw).is_err() {
+            let list: Vec<&str> = raw.split([';', ',']).map(str::trim).filter(|s| !s.is_empty()).collect();
+            db.execute(
+                "UPDATE words SET meaning = ?1 WHERE id = ?2",
+                (serde_json::to_string(&list).unwrap(), id),
+            ).expect("migrate meanings");
+        }
     }
 }
 
@@ -142,7 +163,7 @@ fn list_words(db: &Connection, user_id: i64) -> Result<Resp, String> {
         Ok(json!({
             "id": r.get::<_, i64>(0)?,
             "thai": r.get::<_, String>(1)?,
-            "meaning": r.get::<_, String>(2)?,
+            "meanings": meanings_json(r.get(2)?),
             "phonetic": r.get::<_, String>(3)?,
         }))
     }).map_err(db_err)?
@@ -170,7 +191,7 @@ fn quiz(db: &Connection, mode: &str, user_id: i64) -> Result<Resp, String> {
         Ok(json!({
             "id": r.get::<_, i64>(0)?,
             "thai": r.get::<_, String>(1)?,
-            "meaning": r.get::<_, String>(2)?,
+            "meanings": meanings_json(r.get(2)?),
             "phonetic": r.get::<_, String>(3)?,
             "box": r.get::<_, i64>(4)?,
         }))
@@ -306,15 +327,27 @@ fn body_json(req: &mut Request) -> Result<Value, String> {
     serde_json::from_str(&s).map_err(|_| "invalid json".into())
 }
 
-/// Extracts and validates word fields; thai and meaning must be non-empty.
+/// Extracts and validates word fields. Meanings arrive as a JSON list of
+/// non-empty strings (deduplicated case-insensitively) and are stored as JSON.
 fn word_fields(body: &Value) -> Result<(String, String, String), String> {
     let thai = body["thai"].as_str().unwrap_or("").trim().to_string();
-    let meaning = body["meaning"].as_str().unwrap_or("").trim().to_string();
     let phonetic = body["phonetic"].as_str().unwrap_or("").trim().to_string();
-    if thai.is_empty() || meaning.is_empty() {
-        return Err("thai and meaning are required".into());
+    let mut meanings: Vec<String> = Vec::new();
+    for m in body["meanings"].as_array().map(Vec::as_slice).unwrap_or_default() {
+        let m = m.as_str().unwrap_or("").trim().to_string();
+        if !m.is_empty() && !meanings.iter().any(|e| e.eq_ignore_ascii_case(&m)) {
+            meanings.push(m);
+        }
     }
-    Ok((thai, meaning, phonetic))
+    if thai.is_empty() || meanings.is_empty() {
+        return Err("thai and at least one meaning are required".into());
+    }
+    Ok((thai, serde_json::to_string(&meanings).unwrap(), phonetic))
+}
+
+/// Stored meanings are JSON; tolerate any stray plain text as a one-item list.
+fn meanings_json(raw: String) -> Value {
+    serde_json::from_str(&raw).unwrap_or_else(|_| json!([raw]))
 }
 
 fn check_mode(mode: &str) -> Result<(), String> {
