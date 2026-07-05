@@ -13,11 +13,16 @@
 <body>
 <div id="app" v-cloak>
 
-  <!-- login -->
-  <form v-if="view === 'login'" class="login card" @submit.prevent="login">
+  <!-- login / register -->
+  <form v-if="view === 'login'" class="login card" @submit.prevent="auth">
     <h1>ไทย Practice</h1>
-    <input type="password" v-model="password" placeholder="Password" required autofocus>
-    <button>Log in</button>
+    <input v-model="username" placeholder="Username" required autocapitalize="off" autocomplete="username">
+    <input type="password" v-model="password" placeholder="Password" required
+           :autocomplete="registering ? 'new-password' : 'current-password'">
+    <button>{{ registering ? 'Create account' : 'Log in' }}</button>
+    <button type="button" class="link" @click="registering = !registering; error = ''">
+      {{ registering ? 'Have an account? Log in' : 'New here? Create an account' }}
+    </button>
     <p class="bad" v-if="error">{{ error }}</p>
   </form>
 
@@ -26,6 +31,8 @@
       <h1>ไทย</h1>
       <button :class="{ active: view === 'words' }" @click="view = 'words'; load()">Words</button>
       <button :class="{ active: view === 'practice' }" @click="view = 'practice'; quiz.mode = null">Practice</button>
+      <button class="logout" @click="logout" aria-label="Log out"
+              :title="'Log out ' + me">{{ me }} ↪</button>
     </nav>
 
     <!-- words -->

@@ -93,7 +93,9 @@ button:active { background: #e2e8f0; }
 .bad-btn { background: var(--bad); }
 
 /* login */
-.login { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 20vh; text-align: center; }
+.login { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 15vh; text-align: center; }
+.link { border: none; background: none; color: var(--blue); text-decoration: underline; }
+.logout { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* on-screen thai keyboard */
 .kb { user-select: none; }

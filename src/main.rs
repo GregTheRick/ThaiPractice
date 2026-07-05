@@ -8,6 +8,12 @@ use tiny_http::{Header, Method, Request, Response, Server};
 type Resp = Response<std::io::Cursor<Vec<u8>>>;
 
 const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS users(
+  id INTEGER PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS words(
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL DEFAULT 1,
@@ -25,15 +31,21 @@ CREATE TABLE IF NOT EXISTS progress(
 );
 CREATE TABLE IF NOT EXISTS sessions(
   token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
 ";
 
 fn main() {
-    let password = std::env::var("PASSWORD").expect("set the PASSWORD env var");
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3000);
     let db_path = std::env::var("DB_PATH").unwrap_or_else(|_| "thai.db".into());
     let db = Connection::open(&db_path).expect("open database");
+    // migrate pre-multi-user databases: their sessions table has no user_id,
+    // so drop it (forces one re-login) and let SCHEMA recreate it. Words kept
+    // user_id=1, which the first registered account receives.
+    if db.prepare("SELECT user_id FROM sessions LIMIT 1").is_err() {
+        db.execute_batch("DROP TABLE IF EXISTS sessions").expect("migrate sessions");
+    }
     db.execute_batch(SCHEMA).expect("create schema");
 
     let server = Server::http(("0.0.0.0", port)).expect("bind port");
@@ -41,77 +53,92 @@ fn main() {
     // ponytail: single-threaded request loop — fine for a handful of users,
     // the upgrade path is a thread pool or axum.
     for mut req in server.incoming_requests() {
-        let resp = handle(&mut req, &db, &password);
+        let resp = handle(&mut req, &db);
         let _ = req.respond(resp);
     }
 }
 
-fn handle(req: &mut Request, db: &Connection, password: &str) -> Resp {
+fn handle(req: &mut Request, db: &Connection) -> Resp {
     let url = req.url().to_string();
     let (path, query) = url.split_once('?').unwrap_or((url.as_str(), ""));
     let method = req.method().clone();
 
-    if path == "/api/login" && method == Method::Post {
-        return login(req, db, password);
+    if method == Method::Post && (path == "/api/login" || path == "/api/register") {
+        return account(req, db, path == "/api/register");
     }
     if path.starts_with("/api/") {
-        if !authed(req, db) {
+        let Some((user_id, token)) = session(req, db) else {
             return json_resp(401, json!({"error": "unauthorized"}));
+        };
+        if method == Method::Post && path == "/api/logout" {
+            return logout(db, &token);
         }
-        return api(req, &method, path, query, db)
+        return api(req, &method, path, query, db, user_id)
             .unwrap_or_else(|e| json_resp(400, json!({"error": e})));
     }
     static_file(path)
 }
 
-fn api(req: &mut Request, method: &Method, path: &str, query: &str, db: &Connection) -> Result<Resp, String> {
+fn api(req: &mut Request, method: &Method, path: &str, query: &str, db: &Connection, user_id: i64) -> Result<Resp, String> {
     let word_id = path.strip_prefix("/api/words/").and_then(|s| s.parse::<i64>().ok());
     match (method, path) {
-        (Method::Get, "/api/words") => list_words(db),
+        (Method::Get, "/api/me") => {
+            let username: String = db
+                .query_row("SELECT username FROM users WHERE id = ?1", [user_id], |r| r.get(0))
+                .map_err(db_err)?;
+            Ok(json_resp(200, json!({"username": username})))
+        }
+        (Method::Get, "/api/words") => list_words(db, user_id),
         (Method::Post, "/api/words") => {
             let (thai, meaning, phonetic) = word_fields(&body_json(req)?)?;
             db.execute(
-                "INSERT INTO words(thai, meaning, phonetic, created_at) VALUES (?1, ?2, ?3, ?4)",
-                (&thai, &meaning, &phonetic, now()),
+                "INSERT INTO words(user_id, thai, meaning, phonetic, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                (user_id, &thai, &meaning, &phonetic, now()),
             ).map_err(db_err)?;
             Ok(json_resp(200, json!({"id": db.last_insert_rowid()})))
         }
         (Method::Put, _) if word_id.is_some() => {
             let (thai, meaning, phonetic) = word_fields(&body_json(req)?)?;
             let n = db.execute(
-                "UPDATE words SET thai = ?1, meaning = ?2, phonetic = ?3 WHERE id = ?4",
-                (&thai, &meaning, &phonetic, word_id),
+                "UPDATE words SET thai = ?1, meaning = ?2, phonetic = ?3 WHERE id = ?4 AND user_id = ?5",
+                (&thai, &meaning, &phonetic, word_id, user_id),
             ).map_err(db_err)?;
             if n == 0 { return Err("no such word".into()); }
             Ok(json_resp(200, json!({"ok": true})))
         }
         (Method::Delete, _) if word_id.is_some() => {
+            let n = db.execute("DELETE FROM words WHERE id = ?1 AND user_id = ?2", (word_id, user_id))
+                .map_err(db_err)?;
+            if n == 0 { return Err("no such word".into()); }
             db.execute("DELETE FROM progress WHERE word_id = ?1", [word_id]).map_err(db_err)?;
-            db.execute("DELETE FROM words WHERE id = ?1", [word_id]).map_err(db_err)?;
             Ok(json_resp(200, json!({"ok": true})))
         }
         (Method::Get, "/api/quiz") => {
             let mode = query.split('&').find_map(|kv| kv.strip_prefix("mode=")).unwrap_or("");
             check_mode(mode)?;
-            quiz(db, mode)
+            quiz(db, mode, user_id)
         }
-        (Method::Post, "/api/review") => review(db, &body_json(req)?),
+        (Method::Post, "/api/review") => review(db, &body_json(req)?, user_id),
         _ => Err("no such endpoint".into()),
     }
 }
 
-fn list_words(db: &Connection) -> Result<Resp, String> {
+fn list_words(db: &Connection, user_id: i64) -> Result<Resp, String> {
     let mut boxes: std::collections::HashMap<i64, Value> = std::collections::HashMap::new();
-    let mut stmt = db.prepare("SELECT word_id, mode, box FROM progress").map_err(db_err)?;
-    let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))
+    let mut stmt = db.prepare(
+        "SELECT p.word_id, p.mode, p.box FROM progress p
+         JOIN words w ON w.id = p.word_id WHERE w.user_id = ?1",
+    ).map_err(db_err)?;
+    let rows = stmt.query_map([user_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))
         .map_err(db_err)?;
     for row in rows {
         let (wid, mode, b) = row.map_err(db_err)?;
         boxes.entry(wid).or_insert_with(|| json!({}))[mode] = json!(b);
     }
 
-    let mut stmt = db.prepare("SELECT id, thai, meaning, phonetic FROM words ORDER BY id DESC").map_err(db_err)?;
-    let words = stmt.query_map([], |r| {
+    let mut stmt = db.prepare("SELECT id, thai, meaning, phonetic FROM words WHERE user_id = ?1 ORDER BY id DESC")
+        .map_err(db_err)?;
+    let words = stmt.query_map([user_id], |r| {
         Ok(json!({
             "id": r.get::<_, i64>(0)?,
             "thai": r.get::<_, String>(1)?,
@@ -130,15 +157,16 @@ fn list_words(db: &Connection) -> Result<Resp, String> {
     Ok(json_resp(200, json!(words)))
 }
 
-fn quiz(db: &Connection, mode: &str) -> Result<Resp, String> {
+fn quiz(db: &Connection, mode: &str, user_id: i64) -> Result<Resp, String> {
     let mut stmt = db.prepare(
         "SELECT w.id, w.thai, w.meaning, w.phonetic, COALESCE(p.box, 1)
          FROM words w LEFT JOIN progress p ON p.word_id = w.id AND p.mode = ?1
-         WHERE (p.due_at IS NULL OR p.due_at <= ?2)
+         WHERE w.user_id = ?3
+           AND (p.due_at IS NULL OR p.due_at <= ?2)
            AND NOT (?1 = 'phonetic' AND w.phonetic = '')
          ORDER BY RANDOM() LIMIT 20",
     ).map_err(db_err)?;
-    let words = stmt.query_map((mode, now()), |r| {
+    let words = stmt.query_map((mode, now(), user_id), |r| {
         Ok(json!({
             "id": r.get::<_, i64>(0)?,
             "thai": r.get::<_, String>(1)?,
@@ -151,12 +179,12 @@ fn quiz(db: &Connection, mode: &str) -> Result<Resp, String> {
     Ok(json_resp(200, json!(words)))
 }
 
-fn review(db: &Connection, body: &Value) -> Result<Resp, String> {
+fn review(db: &Connection, body: &Value, user_id: i64) -> Result<Resp, String> {
     let word_id = body["word_id"].as_i64().ok_or("word_id required")?;
     let mode = body["mode"].as_str().unwrap_or("");
     let correct = body["correct"].as_bool().ok_or("correct required")?;
     check_mode(mode)?;
-    db.query_row("SELECT 1 FROM words WHERE id = ?1", [word_id], |_| Ok(()))
+    db.query_row("SELECT 1 FROM words WHERE id = ?1 AND user_id = ?2", (word_id, user_id), |_| Ok(()))
         .map_err(|_| "no such word".to_string())?;
 
     let current: i64 = db.query_row(
@@ -172,25 +200,69 @@ fn review(db: &Connection, body: &Value) -> Result<Resp, String> {
     Ok(json_resp(200, json!({"box": new_box})))
 }
 
-fn login(req: &mut Request, db: &Connection, password: &str) -> Resp {
-    let given = body_json(req).ok()
-        .and_then(|b| b["password"].as_str().map(String::from))
-        .unwrap_or_default();
-    if !constant_time_eq(given.as_bytes(), password.as_bytes()) {
-        return json_resp(401, json!({"error": "wrong password"}));
+/// Registration and login share the body shape; both end in a fresh session.
+fn account(req: &mut Request, db: &Connection, register: bool) -> Resp {
+    let body = body_json(req).unwrap_or(Value::Null);
+    let username = body["username"].as_str().unwrap_or("").trim().to_string();
+    let password = body["password"].as_str().unwrap_or("");
+
+    if register {
+        // ponytail: open registration, no rate limiting — fine for friends &
+        // family; the upgrade path is an invite code or a reverse-proxy limit.
+        if username.is_empty() || username.chars().count() > 32 {
+            return json_resp(400, json!({"error": "username must be 1-32 characters"}));
+        }
+        if password.chars().count() < 8 {
+            return json_resp(400, json!({"error": "password must be at least 8 characters"}));
+        }
+        let hash = hash_password(password);
+        match db.execute(
+            "INSERT INTO users(username, password_hash, created_at) VALUES (?1, ?2, ?3)",
+            (&username, &hash, now()),
+        ) {
+            Ok(_) => start_session(db, db.last_insert_rowid(), &username),
+            Err(_) => json_resp(400, json!({"error": "username is taken"})),
+        }
+    } else {
+        let found: Option<(i64, String, String)> = db.query_row(
+            "SELECT id, username, password_hash FROM users WHERE username = ?1",
+            [&username],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        ).ok();
+        match found {
+            Some((id, name, hash)) if verify_password(password, &hash) => start_session(db, id, &name),
+            _ => json_resp(401, json!({"error": "wrong username or password"})),
+        }
     }
+}
+
+fn start_session(db: &Connection, user_id: i64, username: &str) -> Resp {
     let token = random_token();
-    db.execute("INSERT INTO sessions(token, created_at) VALUES (?1, ?2)", (&token, now())).unwrap();
+    db.execute(
+        "INSERT INTO sessions(token, user_id, created_at) VALUES (?1, ?2, ?3)",
+        (&token, user_id, now()),
+    ).unwrap();
     let cookie = format!("session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000");
-    json_resp(200, json!({"ok": true}))
+    json_resp(200, json!({"username": username}))
         .with_header(Header::from_bytes(&b"Set-Cookie"[..], cookie.as_bytes()).unwrap())
 }
 
-fn authed(req: &Request, db: &Connection) -> bool {
-    let Some(cookie) = req.headers().iter().find(|h| h.field.equiv("Cookie")) else { return false };
+fn logout(db: &Connection, token: &str) -> Resp {
+    let _ = db.execute("DELETE FROM sessions WHERE token = ?1", [token]);
+    json_resp(200, json!({"ok": true})).with_header(
+        Header::from_bytes(&b"Set-Cookie"[..], &b"session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"[..]).unwrap(),
+    )
+}
+
+/// Returns (user_id, token) for a valid session cookie.
+fn session(req: &Request, db: &Connection) -> Option<(i64, String)> {
+    let cookie = req.headers().iter().find(|h| h.field.equiv("Cookie"))?;
     let value = cookie.value.as_str().to_string();
-    let Some(token) = value.split(';').find_map(|c| c.trim().strip_prefix("session=")) else { return false };
-    db.query_row("SELECT 1 FROM sessions WHERE token = ?1", [token], |_| Ok(())).is_ok()
+    let token = value.split(';').find_map(|c| c.trim().strip_prefix("session="))?.to_string();
+    let user_id = db
+        .query_row("SELECT user_id FROM sessions WHERE token = ?1", [&token], |r| r.get(0))
+        .ok()?;
+    Some((user_id, token))
 }
 
 fn static_file(path: &str) -> Resp {
@@ -253,15 +325,29 @@ fn db_err(e: rusqlite::Error) -> String {
     e.to_string()
 }
 
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    // Leaks only the length, which is acceptable for a password check.
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+fn hash_password(password: &str) -> String {
+    use argon2::password_hash::{PasswordHasher, SaltString};
+    let salt = SaltString::encode_b64(&random_bytes()[..16]).unwrap();
+    argon2::Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .unwrap()
+        .to_string()
+}
+
+fn verify_password(password: &str, hash: &str) -> bool {
+    use argon2::password_hash::{PasswordHash, PasswordVerifier};
+    PasswordHash::new(hash)
+        .is_ok_and(|h| argon2::Argon2::default().verify_password(password.as_bytes(), &h).is_ok())
 }
 
 fn random_token() -> String {
+    random_bytes().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn random_bytes() -> [u8; 32] {
     let mut buf = [0u8; 32];
     std::fs::File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut buf))
         .expect("read /dev/urandom");
-    buf.iter().map(|b| format!("{b:02x}")).collect()
+    buf
 }

@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "thai-practice",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "PASSWORD=test cargo run"],
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": ["run"],
       "port": 3000
     }
   ]

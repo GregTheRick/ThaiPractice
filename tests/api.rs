@@ -1,6 +1,6 @@
-// API round-trip against the real binary: login, add a word, quiz, review,
-// Leitner box movement, and the 401 wall. Raw TcpStream keeps us free of an
-// HTTP-client dependency.
+// API round-trip against the real binary: register/login, add a word, quiz,
+// review, Leitner box movement, user isolation, and the 401 wall. Raw
+// TcpStream keeps us free of an HTTP-client dependency.
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -26,7 +26,6 @@ fn start_server() -> Server {
     let db = std::env::temp_dir().join(format!("thai-test-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&db);
     let child = Command::new(env!("CARGO_BIN_EXE_thai-practice"))
-        .env("PASSWORD", "hunter2")
         .env("PORT", port.to_string())
         .env("DB_PATH", &db)
         .spawn()
@@ -57,6 +56,14 @@ fn http(port: u16, method: &str, path: &str, cookie: &str, body: &str) -> (u32, 
     (status, head.to_string(), body.to_string())
 }
 
+fn session_cookie(head: &str) -> String {
+    head.lines()
+        .find_map(|l| l.strip_prefix("Set-Cookie: "))
+        .and_then(|c| c.split(';').next())
+        .expect("session cookie set")
+        .to_string()
+}
+
 #[test]
 fn api_round_trip() {
     let server = start_server();
@@ -65,20 +72,31 @@ fn api_round_trip() {
     // no cookie -> 401
     assert_eq!(http(p, "GET", "/api/words", "", "").0, 401);
 
-    // wrong password -> 401
-    assert_eq!(http(p, "POST", "/api/login", "", r#"{"password":"wrong"}"#).0, 401);
+    // registration validation
+    assert_eq!(http(p, "POST", "/api/register", "", r#"{"username":" ","password":"longenough"}"#).0, 400);
+    assert_eq!(http(p, "POST", "/api/register", "", r#"{"username":"alice","password":"short"}"#).0, 400);
 
-    // login -> cookie
-    let (status, head, _) = http(p, "POST", "/api/login", "", r#"{"password":"hunter2"}"#);
+    // register -> auto-login cookie
+    let (status, head, body) = http(p, "POST", "/api/register", "", r#"{"username":"alice","password":"correcthorse"}"#);
     assert_eq!(status, 200);
-    let token = head.lines()
-        .find_map(|l| l.strip_prefix("Set-Cookie: "))
-        .and_then(|c| c.split(';').next())
-        .expect("session cookie set");
-    let cookie = token.to_string();
+    assert!(body.contains("alice"), "got: {body}");
+    session_cookie(&head);
+
+    // duplicate username rejected, case-insensitively
+    assert_eq!(http(p, "POST", "/api/register", "", r#"{"username":"Alice","password":"correcthorse"}"#).0, 400);
+
+    // login
+    assert_eq!(http(p, "POST", "/api/login", "", r#"{"username":"alice","password":"wrong"}"#).0, 401);
+    let (status, head, _) = http(p, "POST", "/api/login", "", r#"{"username":"alice","password":"correcthorse"}"#);
+    assert_eq!(status, 200);
+    let cookie = session_cookie(&head);
 
     // garbage cookie is still 401
     assert_eq!(http(p, "GET", "/api/words", "session=deadbeef", "").0, 401);
+
+    // whoami
+    let (_, _, body) = http(p, "GET", "/api/me", &cookie, "");
+    assert!(body.contains("alice"), "got: {body}");
 
     // validation: empty thai rejected
     let (status, _, _) = http(p, "POST", "/api/words", &cookie, r#"{"thai":" ","meaning":"water"}"#);
@@ -86,7 +104,7 @@ fn api_round_trip() {
 
     // add a word
     let (status, _, body) = http(p, "POST", "/api/words", &cookie,
-        r#"{"thai":"น้ำ","meaning":"water","phonetic":"nam"}"#);
+        r#"{"thai":"น้ำ","meaning":"water","phonetic":"nám"}"#);
     assert_eq!(status, 200);
     assert!(body.contains("\"id\""), "got: {body}");
 
@@ -126,6 +144,21 @@ fn api_round_trip() {
 
     // unknown mode rejected
     assert_eq!(http(p, "GET", "/api/quiz?mode=hack", &cookie, "").0, 400);
+
+    // user isolation: bob sees nothing of alice's and cannot touch it
+    let (_, head, _) = http(p, "POST", "/api/register", "", r#"{"username":"bob","password":"correcthorse"}"#);
+    let bob = session_cookie(&head);
+    let (_, _, body) = http(p, "GET", "/api/words", &bob, "");
+    assert_eq!(body.trim(), "[]");
+    let (_, _, body) = http(p, "GET", "/api/quiz?mode=spell", &bob, "");
+    assert_eq!(body.trim(), "[]");
+    assert_eq!(http(p, "PUT", "/api/words/1", &bob, r#"{"thai":"x","meaning":"y"}"#).0, 400);
+    assert_eq!(http(p, "DELETE", "/api/words/1", &bob, "").0, 400);
+    assert_eq!(http(p, "POST", "/api/review", &bob, r#"{"word_id":1,"mode":"spell","correct":true}"#).0, 400);
+
+    // logout invalidates the session
+    assert_eq!(http(p, "POST", "/api/logout", &cookie, "").0, 200);
+    assert_eq!(http(p, "GET", "/api/words", &cookie, "").0, 401);
 
     // path traversal blocked
     assert_eq!(http(p, "GET", "/../Cargo.toml", "", "").0, 404);

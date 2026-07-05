@@ -21,7 +21,10 @@ speechSynthesis?.getVoices(); // warm the async voice list
 const app = Vue.createApp({
   data: () => ({
     view: 'login',
+    username: '',
     password: '',
+    registering: false,
+    me: '',
     error: '',
     words: [],
     form: { id: null, thai: '', phonetic: '', meaning: '' },
@@ -37,6 +40,7 @@ const app = Vue.createApp({
   },
   async mounted() {
     try {
+      this.me = (await this.api('/api/me')).username;
       await this.load();
       this.view = 'words';
     } catch { /* stays on login */ }
@@ -51,16 +55,24 @@ const app = Vue.createApp({
       if (!res.ok) throw new Error(data.error || res.status);
       return data;
     },
-    async login() {
+    async auth() {
       this.error = '';
       try {
-        await this.api('/api/login', { method: 'POST', body: JSON.stringify({ password: this.password }) });
+        const r = await this.api(this.registering ? '/api/register' : '/api/login',
+          { method: 'POST', body: JSON.stringify({ username: this.username, password: this.password }) });
+        this.me = r.username;
         this.password = '';
         await this.load();
         this.view = 'words';
       } catch (e) {
         this.error = e.message;
       }
+    },
+    async logout() {
+      await this.api('/api/logout', { method: 'POST' }).catch(() => {});
+      this.me = '';
+      this.words = [];
+      this.view = 'login';
     },
     async load() { this.words = await this.api('/api/words'); },
     toggle(pref) {
