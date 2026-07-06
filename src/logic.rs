@@ -1,6 +1,19 @@
 // Leitner spaced repetition. Boxes 1-5; correct answers climb, wrong answers
 // fall back to box 1 with interval 0 so the word re-enters the current session.
-pub const MODES: [&str; 5] = ["spell", "read", "translate", "phonetic", "listen"];
+// The p-modes are for students who know only phonetics, no Thai script.
+pub const MODES: [&str; 8] =
+    ["spell", "read", "translate", "phonetic", "listen", "pspell", "ptranslate", "plisten"];
+
+/// Modes that prompt with or answer in Thai script (listening speaks the
+/// script via TTS, so it needs it too).
+pub fn needs_thai(mode: &str) -> bool {
+    matches!(mode, "spell" | "read" | "translate" | "phonetic" | "listen" | "plisten")
+}
+
+/// Modes that prompt with or answer in the phonetic transliteration.
+pub fn needs_phonetic(mode: &str) -> bool {
+    matches!(mode, "phonetic" | "pspell" | "ptranslate" | "plisten")
+}
 
 const INTERVAL_DAYS: [i64; 5] = [0, 1, 3, 7, 21];
 const MAX_BOX: i64 = 5;
@@ -39,5 +52,15 @@ mod tests {
     fn garbage_box_from_db_is_clamped() {
         assert_eq!(leitner(0, true), (2, 86_400));
         assert_eq!(leitner(99, true), (5, 21 * 86_400));
+    }
+
+    #[test]
+    fn mode_field_requirements() {
+        assert!(needs_thai("listen") && !needs_phonetic("listen"));
+        assert!(needs_phonetic("pspell") && !needs_thai("pspell"));
+        assert!(needs_thai("plisten") && needs_phonetic("plisten"));
+        for m in MODES {
+            assert!(needs_thai(m) || needs_phonetic(m), "{m} needs some field");
+        }
     }
 }

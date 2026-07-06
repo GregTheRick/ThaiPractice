@@ -1,9 +1,16 @@
+// Every mode is a prompt/answer pair; the quiz card, answer checking and
+// keyboard choice all key off these fields. prompt: meanings|thai|phonetic|audio
+// (audio speaks the Thai script via TTS); answer: thai|phonetic|meanings|self.
+// The Phonetics group serves students who know no Thai script.
 const MODES = [
-  { id: 'spell', name: 'Spelling', badge: 'S', desc: 'See English, type the Thai word' },
-  { id: 'read', name: 'Reading', badge: 'R', desc: 'Read Thai, recall the meaning' },
-  { id: 'translate', name: 'Translation', badge: 'T', desc: 'Read Thai, name every English meaning' },
-  { id: 'phonetic', name: 'Pronunciation', badge: 'P', desc: 'Read Thai, type the phonetic' },
-  { id: 'listen', name: 'Listening', badge: 'L', desc: 'Hear Thai, type what you heard' },
+  { id: 'spell', name: 'Spelling', badge: 'S', group: 'Thai script', prompt: 'meanings', answer: 'thai', desc: 'See English, type the Thai word' },
+  { id: 'read', name: 'Reading', badge: 'R', group: 'Thai script', prompt: 'thai', answer: 'self', desc: 'Read Thai, recall the meaning' },
+  { id: 'translate', name: 'Translation', badge: 'T', group: 'Thai script', prompt: 'thai', answer: 'meanings', desc: 'Read Thai, name every English meaning' },
+  { id: 'phonetic', name: 'Pronunciation', badge: 'P', group: 'Thai script', prompt: 'thai', answer: 'phonetic', desc: 'Read Thai, type the phonetic' },
+  { id: 'listen', name: 'Listening', badge: 'L', group: 'Thai script', prompt: 'audio', answer: 'thai', desc: 'Hear Thai, type what you heard' },
+  { id: 'pspell', name: 'Phonetic spelling', badge: 's', group: 'Phonetics', prompt: 'meanings', answer: 'phonetic', desc: 'See English, type the phonetic' },
+  { id: 'ptranslate', name: 'Phonetic translation', badge: 't', group: 'Phonetics', prompt: 'phonetic', answer: 'meanings', desc: 'Read the phonetic, name every English meaning' },
+  { id: 'plisten', name: 'Phonetic listening', badge: 'l', group: 'Phonetics', prompt: 'audio', answer: 'phonetic', desc: 'Hear Thai, type the phonetic' },
 ];
 
 const norm = s => s.normalize('NFC').trim();
@@ -37,7 +44,7 @@ const app = Vue.createApp({
   }),
   computed: {
     cur() { return this.quiz.words[this.quiz.i]; },
-    thaiTyped() { return this.quiz.mode === 'spell' || this.quiz.mode === 'listen'; },
+    curMode() { return MODES.find(m => m.id === this.quiz.mode); },
   },
   async mounted() {
     try {
@@ -49,6 +56,12 @@ const app = Vue.createApp({
   methods: {
     speak,
     modeName(id) { return MODES.find(m => m.id === id).name; },
+    // mirrors the server's per-mode gating, for the words-view box badges
+    eligible(w, m) {
+      const needsThai = m.prompt === 'thai' || m.prompt === 'audio' || m.answer === 'thai';
+      const needsPhonetic = m.prompt === 'phonetic' || m.answer === 'phonetic';
+      return (!needsThai || w.thai) && (!needsPhonetic || w.phonetic);
+    },
     async api(path, opts = {}) {
       const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
       if (res.status === 401 && path !== '/api/login') this.view = 'login';
@@ -94,6 +107,10 @@ const app = Vue.createApp({
         this.error = 'add at least one meaning';
         return;
       }
+      if (!this.form.thai.trim() && !this.form.phonetic.trim()) {
+        this.error = 'enter the Thai script or a phonetic (or both)';
+        return;
+      }
       const { id, ...body } = this.form;
       try {
         await this.api(id ? `/api/words/${id}` : '/api/words',
@@ -117,7 +134,7 @@ const app = Vue.createApp({
     async startQuiz(mode) {
       this.quiz = { mode, words: await this.api(`/api/quiz?mode=${mode}`),
                     i: 0, answer: '', found: [], revealed: false, result: null, right: 0, wrong: 0 };
-      if (mode === 'listen' && this.cur) speak(this.cur.thai);
+      if (this.curMode.prompt === 'audio' && this.cur) speak(this.cur.thai);
     },
     review(correct) {
       this.quiz[correct ? 'right' : 'wrong']++;
@@ -129,7 +146,7 @@ const app = Vue.createApp({
     },
     submitAnswer() {
       const a = norm(this.quiz.answer);
-      if (this.quiz.mode === 'translate') {
+      if (this.curMode.answer === 'meanings') {
         // name-them-all: each guess must exactly match a whole meaning
         // ("go" never counts for "go to"); a wrong guess ends the round.
         // ponytail: scheduling stays per word — a missed meaning resets the
@@ -149,7 +166,7 @@ const app = Vue.createApp({
         } // repeating an already-found meaning is a harmless no-op
         return;
       }
-      this.quiz.result = this.thaiTyped ? a === norm(this.cur.thai)
+      this.quiz.result = this.curMode.answer === 'thai' ? a === norm(this.cur.thai)
         : a.toLowerCase() === norm(this.cur.phonetic).toLowerCase();
       this.review(this.quiz.result);
     },
@@ -163,7 +180,7 @@ const app = Vue.createApp({
     },
     next() {
       Object.assign(this.quiz, { i: this.quiz.i + 1, answer: '', found: [], revealed: false, result: null });
-      if (this.quiz.mode === 'listen' && this.cur) speak(this.cur.thai);
+      if (this.curMode.prompt === 'audio' && this.cur) speak(this.cur.thai);
     },
   },
 });

@@ -7,10 +7,20 @@ Kedmanee Thai keyboard for people without a Thai keyboard, plus an on-screen
 IPA keyboard (Chulalongkorn CTFL system: vowels incl. ɛ ɔ ə ɯ, consonants
 incl. ʔ ŋ, and combining tone marks) for typing transliterations.
 
-**Modes:** Spelling (see English, type Thai) · Reading (read Thai, self-grade
-the meaning) · Translation (read Thai, type English) · Pronunciation (read
-Thai, type the phonetic — only words with a phonetic are drilled) · Listening
-(hear Thai via the browser's built-in text-to-speech, type it).
+**Thai-script modes:** Spelling (see English, type Thai) · Reading (read Thai,
+self-grade the meaning) · Translation (read Thai, type English) · Pronunciation
+(read Thai, type the phonetic) · Listening (hear Thai via the browser's
+built-in text-to-speech, type it).
+
+**Phonetics modes** (for students who know only the phonetic transliteration,
+no Thai script — e.g. early Chulalongkorn CTFL levels): Phonetic spelling (see
+English, type the phonetic) · Phonetic translation (read the phonetic, type
+English) · Phonetic listening (hear Thai, type the phonetic).
+
+A word needs meanings plus Thai script or a phonetic (or both) — phonetic-only
+words are fine. Each word is only drilled in the modes its fields support;
+in particular, listening modes need Thai script for the TTS, so phonetic-only
+words never appear there.
 
 A word can have several meanings, added one by one in the form. In Translation
 mode you must name every meaning: each guess is checked exactly against a whole

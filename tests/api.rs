@@ -163,6 +163,24 @@ fn api_round_trip() {
     let (_, _, body) = http(p, "GET", "/api/quiz?mode=phonetic", &cookie, "");
     assert!(body.contains("น้ำ") && !body.contains("ไป"), "got: {body}");
 
+    // phonetics-only words: allowed without thai, but need thai OR phonetic
+    assert_eq!(http(p, "POST", "/api/words", &cookie, r#"{"meanings":["fish"]}"#).0, 400);
+    let (status, _, _) = http(p, "POST", "/api/words", &cookie,
+        r#"{"thai":"","meanings":["fish"],"phonetic":"plaa"}"#);
+    assert_eq!(status, 200);
+    // eligible for phonetic modes, invisible to script and listening modes
+    let (_, _, body) = http(p, "GET", "/api/quiz?mode=pspell", &cookie, "");
+    assert!(body.contains("plaa"), "got: {body}");
+    let (_, _, body) = http(p, "GET", "/api/quiz?mode=ptranslate", &cookie, "");
+    assert!(body.contains("plaa"), "got: {body}");
+    let (_, _, body) = http(p, "GET", "/api/quiz?mode=spell", &cookie, "");
+    assert!(!body.contains("plaa"), "got: {body}");
+    let (_, _, body) = http(p, "GET", "/api/quiz?mode=plisten", &cookie, "");
+    assert!(body.contains("น้ำ") && !body.contains("plaa"), "got: {body}");
+    // ...and a word without a phonetic (ไป) is invisible to phonetic modes
+    let (_, _, body) = http(p, "GET", "/api/quiz?mode=pspell", &cookie, "");
+    assert!(!body.contains("ไป"), "got: {body}");
+
     // unknown mode rejected
     assert_eq!(http(p, "GET", "/api/quiz?mode=hack", &cookie, "").0, 400);
 

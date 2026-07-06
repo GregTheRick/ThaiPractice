@@ -71,7 +71,14 @@ button:active { background: #e2e8f0; }
 .words .txt { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .words .thai { font-size: 1.5rem; }
 .words .phon { color: #64748b; font-size: 0.85rem; }
-.boxes { display: flex; flex-direction: column; font-size: 0.7rem; color: #64748b; line-height: 1.2; }
+.boxes {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 0 0.4rem;
+  font-size: 0.7rem;
+  color: #64748b;
+  line-height: 1.4;
+}
 .speak { border: none; background: none; font-size: 1.3rem; }
 .speak.big { font-size: 1.5rem; padding: 0.75rem 1.5rem; }
 
@@ -89,6 +96,7 @@ button:active { background: #e2e8f0; }
 
 /* practice */
 .modes { display: grid; gap: 0.5rem; }
+.modes h3 { margin: 0.5rem 0 0; font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
 .modes button { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; text-align: left; }
 .modes small { color: #64748b; }
 .quiz form { display: flex; flex-direction: column; gap: 0.5rem; }

@@ -39,7 +39,7 @@
     <section v-if="view === 'words'">
       <form class="card add" @submit.prevent="saveWord">
         <div class="row">
-          <input id="thai-input" v-model="form.thai" placeholder="Thai — น้ำ" lang="th" required
+          <input id="thai-input" v-model="form.thai" placeholder="Thai — น้ำ (optional)" lang="th"
                  autocomplete="off">
           <button type="button" class="kb-toggle" :class="{ active: kbOn }" @click="toggle('kbOn')"
                   aria-label="Toggle on-screen Thai keyboard">⌨</button>
@@ -70,14 +70,15 @@
 
       <ul class="words">
         <li v-for="w in words" :key="w.id">
-          <button class="speak" @click="speak(w.thai)" :aria-label="'Speak ' + w.thai">🔊</button>
+          <button class="speak" v-if="w.thai" @click="speak(w.thai)" :aria-label="'Speak ' + w.thai">🔊</button>
+          <span class="speak" v-else aria-hidden="true"></span>
           <div class="txt">
-            <span class="thai">{{ w.thai }}</span>
-            <span class="phon" v-if="w.phonetic">{{ w.phonetic }}</span>
+            <span class="thai">{{ w.thai || w.phonetic }}</span>
+            <span class="phon" v-if="w.thai && w.phonetic">{{ w.phonetic }}</span>
             <span class="mean">{{ w.meanings.join(' · ') }}</span>
           </div>
-          <div class="boxes" title="Leitner box per mode (Spell/Read/Translate/Listen)">
-            <span v-for="m in modes" :key="m.id">{{ m.badge }}{{ w.boxes[m.id] || '·' }}</span>
+          <div class="boxes" title="Leitner box per mode">
+            <span v-for="m in modes.filter(m => eligible(w, m))" :key="m.id">{{ m.badge }}{{ w.boxes[m.id] || '·' }}</span>
           </div>
           <button @click="editWord(w)" aria-label="Edit">✎</button>
           <button @click="delWord(w)" aria-label="Delete">🗑</button>
@@ -89,9 +90,12 @@
     <!-- practice -->
     <section v-else>
       <div v-if="!quiz.mode" class="modes">
-        <button v-for="m in modes" :key="m.id" class="card" @click="startQuiz(m.id)">
-          <strong>{{ m.name }}</strong><small>{{ m.desc }}</small>
-        </button>
+        <template v-for="g in ['Thai script', 'Phonetics']" :key="g">
+          <h3>{{ g }}</h3>
+          <button v-for="m in modes.filter(m => m.group === g)" :key="m.id" class="card" @click="startQuiz(m.id)">
+            <strong>{{ m.name }}</strong><small>{{ m.desc }}</small>
+          </button>
+        </template>
       </div>
 
       <div v-else-if="quiz.i >= quiz.words.length" class="card center">
@@ -109,14 +113,15 @@
       <div v-else class="card quiz">
         <p class="progress">{{ quiz.i + 1 }} / {{ quiz.words.length }} · {{ modeName(quiz.mode) }}</p>
 
-        <p v-if="quiz.mode === 'spell'" class="prompt">{{ cur.meanings.join(' · ') }}</p>
-        <p v-else-if="quiz.mode === 'listen'" class="prompt">
+        <p v-if="curMode.prompt === 'meanings'" class="prompt">{{ cur.meanings.join(' · ') }}</p>
+        <p v-else-if="curMode.prompt === 'audio'" class="prompt">
           <button type="button" class="speak big" @click="speak(cur.thai)">🔊 Play</button>
         </p>
+        <p v-else-if="curMode.prompt === 'phonetic'" class="prompt thai">{{ cur.phonetic }}</p>
         <p v-else class="prompt thai">{{ cur.thai }}</p>
 
-        <!-- reading: reveal + self-grade -->
-        <template v-if="quiz.mode === 'read'">
+        <!-- reveal + self-grade -->
+        <template v-if="curMode.answer === 'self'">
           <button v-if="!quiz.revealed" @click="quiz.revealed = true">Show answer</button>
           <template v-else>
             <p class="answer">{{ cur.meanings.join(' · ') }} <small v-if="cur.phonetic">({{ cur.phonetic }})</small></p>
@@ -132,18 +137,18 @@
           <form v-if="quiz.result === null" @submit.prevent="submitAnswer">
             <div class="row">
               <input id="quiz-input" v-model="quiz.answer" autocomplete="off" autocapitalize="off"
-                     :lang="thaiTyped ? 'th' : 'en'"
-                     :placeholder="thaiTyped ? 'Type the Thai word'
-                       : quiz.mode === 'phonetic' ? 'Type the phonetic — nám' : 'Type a meaning in English'">
-              <button type="button" v-if="thaiTyped" class="kb-toggle" :class="{ active: kbOn }"
+                     :lang="curMode.answer === 'thai' ? 'th' : 'en'"
+                     :placeholder="curMode.answer === 'thai' ? 'Type the Thai word'
+                       : curMode.answer === 'phonetic' ? 'Type the phonetic — nám' : 'Type a meaning in English'">
+              <button type="button" v-if="curMode.answer === 'thai'" class="kb-toggle" :class="{ active: kbOn }"
                       @click="toggle('kbOn')" aria-label="Toggle on-screen Thai keyboard">⌨</button>
-              <button type="button" v-else-if="quiz.mode === 'phonetic'" class="kb-toggle" :class="{ active: kbPhon }"
+              <button type="button" v-else-if="curMode.answer === 'phonetic'" class="kb-toggle" :class="{ active: kbPhon }"
                       @click="toggle('kbPhon')" aria-label="Toggle phonetic character palette">⌨</button>
             </div>
-            <thai-keyboard v-if="kbOn && thaiTyped" target="quiz-input"></thai-keyboard>
-            <thai-keyboard v-else-if="kbPhon && quiz.mode === 'phonetic'" target="quiz-input"
+            <thai-keyboard v-if="kbOn && curMode.answer === 'thai'" target="quiz-input"></thai-keyboard>
+            <thai-keyboard v-else-if="kbPhon && curMode.answer === 'phonetic'" target="quiz-input"
                            :layout="phoneticRows"></thai-keyboard>
-            <template v-if="quiz.mode === 'translate'">
+            <template v-if="curMode.answer === 'meanings'">
               <div class="chips" v-if="quiz.found.length">
                 <span class="chip good-chip" v-for="m in quiz.found" :key="m">✓ {{ m }}</span>
               </div>
@@ -157,8 +162,9 @@
           </form>
           <template v-else>
             <p :class="quiz.result ? 'good' : 'bad'">{{ quiz.result ? '✓ Correct!' : '✗ Not quite' }}</p>
-            <p class="answer thai">{{ cur.thai }} <small v-if="cur.phonetic">({{ cur.phonetic }})</small></p>
-            <div class="chips center-chips" v-if="quiz.mode === 'translate'">
+            <p class="answer thai">{{ cur.thai || cur.phonetic }}
+              <small v-if="cur.thai && cur.phonetic">({{ cur.phonetic }})</small></p>
+            <div class="chips center-chips" v-if="curMode.answer === 'meanings'">
               <span class="chip" :class="quiz.found.includes(m) ? 'good-chip' : 'bad-chip'"
                     v-for="m in cur.meanings" :key="m">{{ quiz.found.includes(m) ? '✓' : '✗' }} {{ m }}</span>
             </div>

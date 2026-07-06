@@ -184,10 +184,13 @@ fn quiz(db: &Connection, mode: &str, user_id: i64) -> Result<Resp, String> {
          FROM words w LEFT JOIN progress p ON p.word_id = w.id AND p.mode = ?1
          WHERE w.user_id = ?3
            AND (p.due_at IS NULL OR p.due_at <= ?2)
-           AND NOT (?1 = 'phonetic' AND w.phonetic = '')
+           AND (?4 = 0 OR w.thai != '')
+           AND (?5 = 0 OR w.phonetic != '')
          ORDER BY RANDOM() LIMIT 20",
     ).map_err(db_err)?;
-    let words = stmt.query_map((mode, now(), user_id), |r| {
+    let words = stmt.query_map(
+        (mode, now(), user_id, logic::needs_thai(mode), logic::needs_phonetic(mode)),
+        |r| {
         Ok(json!({
             "id": r.get::<_, i64>(0)?,
             "thai": r.get::<_, String>(1)?,
@@ -339,8 +342,8 @@ fn word_fields(body: &Value) -> Result<(String, String, String), String> {
             meanings.push(m);
         }
     }
-    if thai.is_empty() || meanings.is_empty() {
-        return Err("thai and at least one meaning are required".into());
+    if meanings.is_empty() || (thai.is_empty() && phonetic.is_empty()) {
+        return Err("a meaning plus Thai script or a phonetic are required".into());
     }
     Ok((thai, serde_json::to_string(&meanings).unwrap(), phonetic))
 }
