@@ -15,14 +15,18 @@ const MODES = [
 
 const norm = s => s.normalize('NFC').trim();
 
+const thaiVoices = () => speechSynthesis.getVoices().filter(v => v.lang.startsWith('th'));
+
 function speak(text, rate = 1) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'th-TH';
   u.rate = rate;
-  // prefer the higher-quality voices if installed (Siri voices are never
-  // exposed to web pages, so Premium/Enhanced is as good as it gets)
-  const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('th'));
-  const voice = voices.find(v => /premium/i.test(v.name))
+  // the user's chosen voice first, otherwise prefer the higher-quality ones
+  // (Siri voices are never exposed to web pages, so Premium/Enhanced is as
+  // good as it gets)
+  const voices = thaiVoices();
+  const voice = voices.find(v => v.name === localStorage.getItem('ttsVoice'))
+    || voices.find(v => /premium/i.test(v.name))
     || voices.find(v => /enhanced/i.test(v.name)) || voices[0];
   if (voice) u.voice = voice;
   speechSynthesis.cancel();
@@ -43,6 +47,8 @@ const app = Vue.createApp({
     newMeaning: '',
     kbOn: localStorage.getItem('kbOn') === '1',
     kbPhon: localStorage.getItem('kbPhon') === '1',
+    ttsVoice: localStorage.getItem('ttsVoice') || '',
+    voiceNames: [],
     phoneticRows: PHONETIC,
     modes: MODES,
     quiz: { mode: null, words: [], i: 0, answer: '', found: [], revealed: false, result: null, right: 0, wrong: 0 },
@@ -52,6 +58,9 @@ const app = Vue.createApp({
     curMode() { return MODES.find(m => m.id === this.quiz.mode); },
   },
   async mounted() {
+    const listVoices = () => { this.voiceNames = thaiVoices().map(v => v.name); };
+    listVoices();
+    speechSynthesis?.addEventListener('voiceschanged', listVoices);
     try {
       this.me = (await this.api('/api/me')).username;
       await this.load();
@@ -97,6 +106,11 @@ const app = Vue.createApp({
     toggle(pref) {
       this[pref] = !this[pref];
       localStorage.setItem(pref, this[pref] ? '1' : '0');
+    },
+    setVoice() {
+      localStorage.setItem('ttsVoice', this.ttsVoice);
+      const sample = this.words.find(w => w.thai);
+      if (sample) speak(sample.thai); // hear the change
     },
     addMeaning() {
       const m = norm(this.newMeaning);

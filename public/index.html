@@ -88,6 +88,12 @@
         </li>
       </ul>
       <p class="center" v-if="!words.length">No words yet — add your first one above.</p>
+      <label class="voice" v-if="voiceNames.length > 1">Voice
+        <select v-model="ttsVoice" @change="setVoice">
+          <option value="">Automatic (best available)</option>
+          <option v-for="v in voiceNames" :key="v" :value="v">{{ v }}</option>
+        </select>
+      </label>
     </section>
 
     <!-- practice -->

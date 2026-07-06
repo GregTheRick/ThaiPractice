@@ -112,6 +112,10 @@ button:active { background: #e2e8f0; }
 .good-btn { background: var(--good); }
 .bad-btn { background: var(--bad); }
 
+/* tts voice picker */
+.voice { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; color: #64748b; font-size: 0.9rem; }
+.voice select { font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+
 /* login */
 .login { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 15vh; text-align: center; }
 .link { border: none; background: none; color: var(--blue); text-decoration: underline; }
