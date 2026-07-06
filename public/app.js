@@ -15,10 +15,15 @@ const MODES = [
 
 const norm = s => s.normalize('NFC').trim();
 
-function speak(text) {
+function speak(text, rate = 1) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'th-TH';
-  const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('th'));
+  u.rate = rate;
+  // prefer the higher-quality voices if installed (Siri voices are never
+  // exposed to web pages, so Premium/Enhanced is as good as it gets)
+  const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('th'));
+  const voice = voices.find(v => /premium/i.test(v.name))
+    || voices.find(v => /enhanced/i.test(v.name)) || voices[0];
   if (voice) u.voice = voice;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);

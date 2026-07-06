@@ -72,6 +72,9 @@
         <li v-for="w in words" :key="w.id">
           <button class="speak" v-if="w.thai" @click="speak(w.thai)" :aria-label="'Speak ' + w.thai">🔊</button>
           <span class="speak" v-else aria-hidden="true"></span>
+          <button class="speak" v-if="w.thai" @click="speak(w.thai, 0.6)"
+                  :aria-label="'Speak slowly ' + w.thai">🐢</button>
+          <span class="speak" v-else aria-hidden="true"></span>
           <div class="txt">
             <span class="thai">{{ w.thai || w.phonetic }}</span>
             <span class="phon" v-if="w.thai && w.phonetic">{{ w.phonetic }}</span>
@@ -116,6 +119,7 @@
         <p v-if="curMode.prompt === 'meanings'" class="prompt">{{ cur.meanings.join(' · ') }}</p>
         <p v-else-if="curMode.prompt === 'audio'" class="prompt">
           <button type="button" class="speak big" @click="speak(cur.thai)">🔊 Play</button>
+          <button type="button" class="speak big" @click="speak(cur.thai, 0.6)" aria-label="Play slowly">🐢</button>
         </p>
         <p v-else-if="curMode.prompt === 'phonetic'" class="prompt thai">{{ cur.phonetic }}</p>
         <p v-else class="prompt thai">{{ cur.thai }}</p>
